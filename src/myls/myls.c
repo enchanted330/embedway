@@ -27,12 +27,16 @@
 #define BLUE    "\e[1;34m"
 #define GREEN   "\e[1;32m"
 
-static int aflag,lflag,Rflag;
-const char *short_opt = "alR";
+static int aflag,lflag,Rflag,Uflag,iflag,rflag,Sflag;
+const char    *short_opt = "alRUirS";
 struct option long_opt[] = {
 	                           {"all",0,NULL,'a'},
                            	   {   "",0,NULL,'l'},
                            	   {   "",0,NULL,'R'},
+                           	   {   "",0,NULL,'U'},
+                           	   {"inode",0,NULL,'i'},
+                           	   {"reverse",0,NULL,'r'},
+                           	   {   "",0,NULL,'S'},
                                {0,0,0,0}
                            };
 
@@ -43,20 +47,31 @@ int main(int argc, char *argv[])
 	{
 		switch(ret)
 		{
-			case 'a':
+			case 'a': /* 列出所有文件 */
 				aflag = 1;
 				break;
-			case 'l':
+			case 'l': /* 列出详细信息 */
 				lflag = 1;
 				break;
-			case 'R':
+			case 'R': /* 递归遍历目录 */
 				Rflag = 1;
+				break;
+			case 'U': /* 不进行排序 */
+				Uflag = 1;
+				break;
+			case 'i': /* 列出inode节点号 */
+				iflag = 1;
+				break;
+			case 'r': /* 反向排序 */
+				rflag = 1;
+				break;
+			case 'S': /* 按文件大小排序 */
+				Sflag = 1;
 				break;
 			default:
 				break;
 		}
 	}
-	printf("a = %d,l = %d, R = %d \n",aflag,lflag,Rflag);
 	argc = argc - optind;
 	d_list *plist = init_list();
 	if(0 == argc)
@@ -69,12 +84,14 @@ int main(int argc, char *argv[])
 	        save_to_list(argv[i+optind],plist);
 		}
 	}
-	sort_list(plist,str_cmp);
+	if(0 == Uflag)
+		sort_list(plist,str_cmp);
 	list_traverse(plist,print);
 	destroy_list(plist,free_node);
 	return OK;
 }
 
+/* 将文件信息保存到file_info结构体 */
 file_info *save_to_info(struct stat* pst,const char *name)
 {
 	file_info *pf= (file_info*)malloc(sizeof(file_info));
@@ -95,12 +112,14 @@ file_info *save_to_info(struct stat* pst,const char *name)
 	pf->gid   = pst->st_gid;
 	pf->nlink = pst->st_nlink;
 	pf->size  = pst->st_size;
+	pf->inode = pst->st_ino;
 	pf->mtime = pst->st_mtime;
 	pf->mode  = pst->st_mode;
 	pf->name  = str;
 	return pf;
 }
 
+/* 保存至链表 */
 int save_to_list(const char *path, d_list *plist)
 {
 	char   fpath[4096];
@@ -202,6 +221,7 @@ char *gid_str(gid_t gid)
 		return pgr->gr_name;
 }
 
+/* 获取文件权限位 */
 char *mode_str(int mode,char *str)
 {
 	strcpy(str,"----------");
@@ -241,7 +261,16 @@ int str_cmp(const void* p1, const void* p2)
 {
 	file_info *pf1 = (file_info*)p1;
 	file_info *pf2 = (file_info*)p2;
-	return strcmp(pf1->name,pf2->name);
+	file_info *tmp;
+	if(1 == rflag)
+	{
+		tmp = pf1;
+		pf1 = pf2;
+		pf2 = tmp;
+	}
+	if(1 == Sflag)
+		return (pf2->size) > (pf1->size) ? 1 : 0; /* 大小排序 */
+	return strcmp(pf1->name,pf2->name);           /* 文件名排序 */
 }
 
 void free_node(pnode p)
@@ -255,46 +284,39 @@ void free_node(pnode p)
 void print(const void *p)
 {
 	file_info *pf = (file_info*)p;
-	/*
-	if(0 == aflag)
+	if(1 == lflag)
 	{
-		if('.' != pf->name[0])
-		{
-			if(1 == lflag)
-				print_info(pf);
-			print_name(pf);
-		}
-    }
-	else
-	{
-		if(1 == lflag)
-			print_info(pf);
+		if(1 == iflag)
+			printf("%d ",pf->inode);  /* inode 节点号 */
+		print_info(pf);
 		print_name(pf);
 	}
-	*/
-	if(1 == lflag)
-		print_info(pf);
-	print_name(pf);
+	else
+	{
+		if(1 == iflag)
+			printf("%d ",pf->inode);
+		print_name(pf);
+	}
 	return;
 }
 
 void print_info(file_info *pf)
 {
 	char str[11];
-	printf("%s %2d %-10s %-10s %6d %.12s ",mode_str(pf->mode,str),
-							(int)pf->nlink,
-		                    uid_str(pf->uid),
-		                    gid_str(pf->gid),
-					        (int)pf->size,
-							ctime(&pf->mtime) + 4);
+	printf("%s ",mode_str(pf->mode,str));  /* 权限 */
+	printf("%2d ",(int)pf->nlink);         /* 连接数 */
+	printf("%-10s ",uid_str(pf->uid));     /* 用户 */
+	printf("%-10s ",gid_str(pf->gid));     /* 组 */
+	printf("%6d ",(int)pf->size);          /* 大小 */
+	printf("%.12s ",ctime(&pf->mtime)+4);  /* 最后修改时间 */
 }
 
 void print_name(file_info *pf)
 {
 	if(S_ISDIR(pf->mode))
-		printf(""BLUE"%s\n"NONE,pf->name);
+		printf(""BLUE"%s\n"NONE,pf->name); /* 目录-蓝色 */
 	else if((S_IXOTH & pf->mode) || (S_IXUSR & pf->mode) || (S_IXGRP & pf->mode))
-		printf(""GREEN"%s\n"NONE,pf->name);
+		printf(""GREEN"%s\n"NONE,pf->name);/* 可执行文件-绿色 */
 	else
-		printf("%s\n",pf->name);
+		printf("%s\n",pf->name);           /* 普通文件 */
 }

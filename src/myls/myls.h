@@ -17,6 +17,7 @@ typedef struct s_file_info
 	int    nlink;
 	int    mode;
 	int    size;
+	int    inode;
 	time_t mtime;
 	char   *name;
 }file_info;
