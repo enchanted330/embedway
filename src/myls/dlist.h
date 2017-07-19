@@ -75,12 +75,12 @@ pnode ins_after(d_list *plist,pnode p,pnode s);
 pnode locate_pos(d_list *plist,int i);  
 
 /*返回在链表中数据项为i的节点的位置*/  
-pnode search_item(d_list *plist,item i,int(*call_back_cmp)(void* ,void* ));  
+pnode search_item(d_list *plist,item i,int(*call_back_cmp)(void const* , const void* ));  
   
-/*依次对链表中每个元素调用函数visit()*/  
-void list_traverse(d_list *plist,void (*visit)());  
+/*依次对链表中每个元素调用函数call_back_print*/  
+void list_traverse(d_list *plist,void(*call_back_print)(const void *));  
 
 /*链表排序*/
-void sort_list(d_list *plist,int (*call_back_cmp)());
+void sort_list(d_list *plist,int (*call_back_cmp)(const void*, const void*));
 
 #endif
